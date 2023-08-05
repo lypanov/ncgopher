@@ -779,7 +779,6 @@ pub fn add_client_certificate(app: &mut Cursive, url: Option<Url>) {
                 }
 
                 let controller = app.user_data::<Controller>().expect("controller missing");
-                controller.create_client_certificate(common_name.to_string(), notes, valid_until_date, parsed_url);
                 app.pop_layer();
                 if let Some(original_url) = &original_url {
                     let controller = app.user_data::<Controller>().expect("controller missing");

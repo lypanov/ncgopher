@@ -7,8 +7,6 @@ extern crate dirs;
 extern crate idna;
 extern crate pem;
 extern crate percent_encoding;
-extern crate rcgen;
-extern crate ring;
 extern crate rusqlite;
 extern crate serde;
 extern crate serde_derive;

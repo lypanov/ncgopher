@@ -1,5 +1,4 @@
-use ::pem;
-use ::time::{Date, OffsetDateTime};
+use ::time::{OffsetDateTime};
 use ::time::format_description::well_known::Rfc3339;
 use base64::{Engine as _, engine::{general_purpose}};
 use cursive::{
@@ -12,7 +11,6 @@ use cursive::{
 use linkify::{LinkFinder, LinkKind};
 use mime::Mime;
 use native_tls::{Identity, Protocol, TlsConnector};
-use rcgen::{date_time_ymd, Certificate, CertificateParams, DistinguishedName, DnType};
 use std::error::Error;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
@@ -24,6 +22,7 @@ use std::thread;
 use url::{Position, Url};
 use urlencoding::decode_binary;
 use x509_parser::prelude::*;
+use sha2::{Digest, Sha256};
 
 use crate::bookmarks::{Bookmark, Bookmarks};
 use crate::certificates::Certificates;
@@ -306,10 +305,11 @@ impl Controller {
             // check certificate
             if let Some(cert) = cert_opt {
                 // TOFU: Check if we already have a certificate fingerprint for a given host
+                // create a Sha256 object
                 let cert_fingerprint = cert.to_der().unwrap();
-                let hash = ring::digest::digest(&ring::digest::SHA256, &cert_fingerprint);
-                let cert_fingerprint = general_purpose::STANDARD.encode(hash);
-                info!("Peer certificate: {:?}", &cert_fingerprint);
+                let mut hasher = Sha256::new();
+                hasher.update(cert_fingerprint);
+                let cert_fingerprint = base64::encode(hasher.finalize());
 
                 match fingerprint {
                     Some(f) => {
@@ -1879,57 +1879,6 @@ impl Controller {
             .lock()
             .expect("could not lock certificate store")
             .insert(url, cert_fingerprint);
-    }
-
-    pub fn create_client_certificate(
-        &mut self,
-        common_name: String,
-        note: String,
-        expiration_date: Date,
-        specified_url: Option<Url>,
-    ) {
-        let mut params: CertificateParams = Default::default();
-        let now = OffsetDateTime::now_utc().date();
-        params.not_before = date_time_ymd(now.year(), now.month().into(), now.day());
-        params.not_after = date_time_ymd(
-            expiration_date.year(),
-            expiration_date.month().into(),
-            expiration_date.day(),
-        );
-        params.distinguished_name = DistinguishedName::new();
-        params
-            .distinguished_name
-            .push(DnType::CommonName, common_name.as_str());
-        if let Ok(cert) = Certificate::from_params(params) {
-            if let (Ok(cert), private_key) =
-                (cert.serialize_pem(), cert.serialize_private_key_pem())
-            {
-                if let Ok(parsed) = pem::parse(&cert) {
-                    // Create fingerprint:
-                    let der_serialized = parsed.contents;
-                    let hash = ring::digest::digest(&ring::digest::SHA256, &der_serialized);
-                    let fingerprint: String = hash
-                        .as_ref()
-                        .iter()
-                        .map(|b| format!("{:02X}", b))
-                        .collect::<Vec<String>>()
-                        .join(":");
-
-                    let client_certificate = ClientCertificate {
-                        common_name,
-                        note,
-                        fingerprint,
-                        cert,
-                        private_key,
-                        expiration_date,
-                    };
-                    self.client_certificates
-                        .lock()
-                        .unwrap()
-                        .insert(client_certificate, &specified_url);
-                }
-            }
-        }
     }
 
     pub fn update_client_certificate(&mut self, cc: &ClientCertificate, urls: Vec<Url>) {
